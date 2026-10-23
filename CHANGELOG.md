@@ -8,6 +8,11 @@
   sessions no longer get other sessions' info logs in their output.
 - namida fork: sessions that leave the history keep the log messages still
   queued for them, so parallel sessions no longer return empty output.
+- namida fork: a session's message count is reset before anything can log for
+  it, so a debug log at session start no longer leaves the count negative and
+  every later wait for its output timing out.
+- namida fork: runs without a session no longer abort with "Immediate exit
+  requested" after a session with an id like 1000 or 2000 was cancelled.
 - namida fork: added `ffmpeg_kit_config_set_log_redirection_strategy` and
   `ffmpeg_kit_config_get_log_redirection_strategy`.
 - namida fork: added the `namida` bundle (base, plus zlib and dav1d, without

@@ -36,7 +36,7 @@ The fork also fixes session log delivery (5 second waits, output mixed between p
 
 ### Publishing the bundle
 
-1. Run the `builder_image` workflow once. It publishes the Linux builder image to `ghcr.io/<owner>/ffmpeg-kit-builders-dev`. Make that package public, or give this repository read access to it.
+1. Run the `builder_image` workflow once. It publishes the Linux builder image to `ghcr.io/<owner>/ffmpeg-kit-builders-dev` as a private package. This repository gets read access to it automatically, which "Manage Actions access" in the package settings shows.
 2. Run the `namida_release` workflow. It runs the native tests on Linux, then builds the bundle for Android, iOS, macOS, Windows and Linux and uploads it to the `v<version>-<platform>` releases.
 
 > [!NOTE]

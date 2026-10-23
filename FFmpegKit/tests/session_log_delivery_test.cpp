@@ -2,7 +2,10 @@
 //  - a drain waiter must not miss the wakeup and sleep for its whole timeout
 //  - a session that left the history keeps the logs still queued for it
 //  - a session's -loglevel applies to that session only
+//  - a run without a session ignores cancelled sessions sharing its slot
+#include "FFmpegKitConfig.hpp"
 #include "ffmpegkit_wrapper.h"
+#include "ffprobe_lib.h"
 
 #include <chrono>
 #include <cstdint>
@@ -104,17 +107,31 @@ ProbeResult runProbe(const char *const *args) {
 
 class SessionLogDeliveryTest : public ::testing::Test {
 protected:
+  // other suites stop the callback thread when they leave redirection disabled
   void SetUp() override {
+    ffmpeg_kit_initialize();
+    redirectionWasEnabled_ =
+        ffmpegkit::FFmpegKitConfig::isRedirectionEnabledForTesting();
+    if (!redirectionWasEnabled_) {
+      ffmpegkit::FFmpegKitConfig::enableRedirection();
+    }
     previousHistorySize_ = ffmpeg_kit_get_session_history_size();
+    previousLogLevel_ = ffmpeg_kit_config_get_log_level();
   }
 
   void TearDown() override {
+    ffmpeg_kit_config_set_log_level(previousLogLevel_);
     ffmpeg_kit_set_session_history_size(previousHistorySize_);
     ffmpeg_kit_config_clear_sessions();
+    if (!redirectionWasEnabled_) {
+      ffmpegkit::FFmpegKitConfig::disableRedirection();
+    }
   }
 
 private:
+  bool redirectionWasEnabled_ = true;
   int64_t previousHistorySize_ = 10;
+  FFmpegKitLogLevel previousLogLevel_ = FFMPEG_KIT_LOG_LEVEL_INFO;
 };
 
 } // namespace
@@ -225,4 +242,28 @@ TEST_F(SessionLogDeliveryTest, LogLevelOptionOnlyAppliesToItsSession) {
     EXPECT_NE(result.output.find("Input #0"), std::string::npos)
         << "info session lost its own logs: " << result.output;
   }
+}
+
+// Before the fix, a context run without a session (id 0) checked the cancel
+// slot it shares with sessions 1000, 2000... and aborted with "Immediate exit
+// requested" once one of them had been cancelled.
+TEST_F(SessionLogDeliveryTest, RunsWithoutSessionIgnoreCancelledSessionsSharingTheirSlot) {
+  int64_t sessionId = 0;
+  while (sessionId == 0 || sessionId % 1000 != 0) {
+    FFprobeSessionHandle session = ffprobe_kit_create_session_from_argv(
+        kProbeArgc, const_cast<const char **>(kQuietProbeArgs));
+    ASSERT_NE(session, nullptr);
+    sessionId = ffmpeg_kit_session_get_session_id(session);
+    if (sessionId % 1000 == 0) {
+      ffmpeg_kit_cancel_session(sessionId);
+    }
+    ffmpeg_kit_handle_release(session);
+  }
+
+  FFprobeContext *context = ffprobe_init(
+      "ffprobe -v error -show_entries stream=width -f lavfi -i "
+      "testsrc=size=137x79:rate=1:duration=1");
+  ASSERT_NE(context, nullptr);
+  EXPECT_EQ(ffprobe_run(context), 0);
+  ffprobe_free(context);
 }

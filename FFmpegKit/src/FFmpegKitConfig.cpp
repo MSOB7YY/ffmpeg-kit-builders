@@ -1136,9 +1136,9 @@ static CallbackData *callbackDataRemove() {
  * @param sessionId session id
  */
 static void registerSessionId(long sessionId) {
-  av_log(nullptr, AV_LOG_DEBUG, "registerSessionId session_id=%ld\n", sessionId);
   std::atomic_store(&sessionLogLevelMap[sessionId % SESSION_MAP_SIZE],
                     SessionLogLevelUnset);
+  av_log(nullptr, AV_LOG_DEBUG, "registerSessionId session_id=%ld\n", sessionId);
   std::atomic_store(&sessionMap[sessionId % SESSION_MAP_SIZE], (short)1);
 }
 
@@ -1174,6 +1174,11 @@ void cancelSession(long sessionId) {
  * @return 1 if exists, false otherwise
  */
 int cancelRequested(long sessionId) {
+  // id 0 is a context run without a session, it shares slot 0 with sessions
+  // 1000, 2000... and would see their cancellation
+  if (sessionId == 0) {
+    return 0;
+  }
   if (std::atomic_load(&sessionMap[sessionId % SESSION_MAP_SIZE]) == 2) {
     av_log(nullptr, AV_LOG_DEBUG, "cancelRequested session_id=%ld\n", sessionId);
     return 1;
@@ -1544,12 +1549,13 @@ executeFFmpeg(const std::shared_ptr<ffmpegkit::FFmpegSession> &session,
   std::string sessionStr = std::to_string(sessionId);
   session->debugLog("FFmpegKitConfig::executeFFmpeg begin session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
   
-  bindSessionToThread(session);
-
-  registerSessionId(sessionId);
+  // reset before binding: a message counted for the session and then reset
+  // away would leave its drain count negative, and every wait would time out
 #ifndef __EMSCRIPTEN__
   resetMessagesInTransmit(sessionId);
 #endif
+  registerSessionId(sessionId);
+  bindSessionToThread(session);
 
   std::vector<const char *> argv;
   argv.reserve(arguments->size() + 1);
@@ -1611,12 +1617,13 @@ int executeFFprobe(const std::shared_ptr<ffmpegkit::AbstractSession> &session,
   const long sessionId = session->getSessionId();
   std::string sessionStr = std::to_string(sessionId);
   session->debugLog("FFmpegKitConfig::executeFFprobe begin session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
-  bindSessionToThread(session);
-
-  registerSessionId(sessionId);
+  // reset before binding: a message counted for the session and then reset
+  // away would leave its drain count negative, and every wait would time out
 #ifndef __EMSCRIPTEN__
   resetMessagesInTransmit(sessionId);
 #endif
+  registerSessionId(sessionId);
+  bindSessionToThread(session);
 
   // Preserve the session argument vector end-to-end. Rebuilding a
   // command string here loses literal quote characters in filenames.
@@ -1701,16 +1708,16 @@ int executeFFplay(const long sessionId,
   auto session = ffmpegkit::FFmpegKitConfig::getSession(sessionId);
   std::string sessionStr = std::to_string(sessionId);
   session->debugLog("FFmpegKitConfig::executeFFplay begin session_handle=%s session_id=%d", sessionStr.c_str(), sessionId);
+#ifndef __EMSCRIPTEN__
+  resetMessagesInTransmit(sessionId);
+#endif
+  registerSessionId(sessionId);
   bindSessionToThread(session);
   globalFFplaySessionId = sessionId;
 
   if (tlsSession != nullptr) {
     tlsSession->debugLog("FFmpegKitConfig::executeFFplay sessionId: %ld tls Bound", sessionId);
   }
-  registerSessionId(sessionId);
-#ifndef __EMSCRIPTEN__
-  resetMessagesInTransmit(sessionId);
-#endif
 
   std::vector<const char *> argv;
   argv.reserve(arguments->size() + 1);
