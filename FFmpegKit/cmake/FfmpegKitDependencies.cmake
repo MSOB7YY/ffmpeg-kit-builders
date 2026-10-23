@@ -38,9 +38,13 @@ function(ffmpegkit_configure_dependencies TARGET_NAME OUT_BUNDLE_LIBRARIES)
         FFMPEG_PKG_LIST "${_FFMPEG_CONFIG_HEADER}" CONFIG_SDL2 sdl2
     )
     if(NOT FFMPEG_KIT_BUNDLE_TYPE STREQUAL "base")
-        ffmpegkit_append_dependency_if_enabled(
-            FFMPEG_PKG_LIST "${_FFMPEG_CONFIG_HEADER}" CONFIG_ICONV iconv
-        )
+        # without a built libiconv, FFmpeg's iconv is the C library's (glibc), nothing to link
+        pkg_check_modules(_FFMPEGKIT_BUILT_ICONV QUIET iconv)
+        if(_FFMPEGKIT_BUILT_ICONV_FOUND)
+            ffmpegkit_append_dependency_if_enabled(
+                FFMPEG_PKG_LIST "${_FFMPEG_CONFIG_HEADER}" CONFIG_ICONV iconv
+            )
+        endif()
         ffmpegkit_append_dependency_if_enabled(
             FFMPEG_PKG_LIST "${_FFMPEG_CONFIG_HEADER}" CONFIG_BZLIB bzip2
         )
