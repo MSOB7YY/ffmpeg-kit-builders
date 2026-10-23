@@ -2,6 +2,16 @@
 
 ## Version 0.11.2
 
+- namida fork: getting a session's output no longer waits for the full 5 second
+  drain timeout now and then (lost wakeup of the drain and callback waiters).
+- namida fork: `-loglevel` only applies to its own session, so parallel quiet
+  sessions no longer get other sessions' info logs in their output.
+- namida fork: sessions that leave the history keep the log messages still
+  queued for them, so parallel sessions no longer return empty output.
+- namida fork: added `ffmpeg_kit_config_set_log_redirection_strategy` and
+  `ffmpeg_kit_config_get_log_redirection_strategy`.
+- namida fork: added the `namida` bundle (base, plus zlib and dav1d, without
+  SDL2 and ffplay) and the `namida_release` workflow that publishes it.
 - Expanded WebAssembly support for library builds and runtime integration.
 - Improved callback safety across native and WebAssembly execution, including
   thread-safe callback state, dedicated main-runtime dispatch, and failure

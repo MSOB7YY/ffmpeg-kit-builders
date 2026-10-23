@@ -31,6 +31,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # image names must be lowercase, owners like MSOB7YY are not
+      - name: Resolve image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ffmpeg-kit-builders-dev" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -43,8 +49,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/ffmpeg-kit-builders-dev:sha-${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/ffmpeg-kit-builders-dev:latest
+            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -56,7 +62,7 @@ jobs:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         shell: bash
         run: |
-          image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/ffmpeg-kit-builders-dev"
+          image="${{ steps.image.outputs.name }}"
           test -n "$IMAGE_DIGEST"
           {
             echo "image=${image}"

@@ -24,6 +24,7 @@
 #include <stdio.h>
 
 #include "cmdutils.h"
+#include "ffmpegkit_session_context.h"
 #include "fopen_utf8.h"
 #include "opt_common.h"
 
@@ -1361,7 +1362,8 @@ int opt_loglevel(void *optctx, const char *opt, const char *arg)
 
 end:
     av_log_set_flags(flags);
-    av_log_set_level(level);
+    if (!ffmpegkit_set_session_log_level(level))
+        av_log_set_level(level);
     return 0;
 }
 

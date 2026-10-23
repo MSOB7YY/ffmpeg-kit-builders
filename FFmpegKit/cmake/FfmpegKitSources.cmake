@@ -27,6 +27,18 @@ function(ffmpegkit_prepare_sources OUT_SOURCES OUT_HEADERS)
     list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay.c")
     list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffprobe.c")
 
+    # FFplay needs SDL2, builds configured without it get the stub that keeps its exports
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h" FFMPEGKIT_SDL2_CONFIG
+         REGEX "^#define CONFIG_SDL2 1$")
+    if(FFMPEGKIT_SDL2_CONFIG)
+        list(REMOVE_ITEM KIT_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay_lib_stub.c")
+    else()
+        message(STATUS "SDL2 disabled, building FFplay as a stub")
+        list(REMOVE_ITEM KIT_SOURCES
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay_lib.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/ffplay_renderer.c")
+    endif()
+
     list(FILTER KIT_SOURCES EXCLUDE REGEX ".*_(bak|orig)\\.(c|cpp)$")
     list(FILTER KIT_HEADERS EXCLUDE REGEX ".*_(bak|orig)\\.h$")
 

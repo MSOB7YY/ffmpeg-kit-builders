@@ -100,6 +100,8 @@ Asynchronous execution supports several callback types:
 
 - `ffmpeg_kit_config_set_log_level(FFmpegKitLogLevel level)`: Set global log verbosity.
 - `ffmpeg_kit_config_get_log_level()`: Get current log level.
+- `ffmpeg_kit_config_set_log_redirection_strategy(strategy)`: Set when the logs of sessions created afterwards are also printed to the console (stdout, logcat on Android).
+- `ffmpeg_kit_config_get_log_redirection_strategy()`: Get the current log redirection strategy.
 - `ffmpeg_kit_config_set_audio_output_device(const char *device_name)`: Select audio output device for FFplay.
 - `ffmpeg_kit_config_list_audio_output_devices()`: Returns a `';'`-delimited string of available audio output device names. Caller must free with `ffmpeg_kit_free`.
 - `ffmpeg_kit_config_enable_debug_log(void *session)`: Enable verbose internal debugging logs for a session (pass `NULL` for global).

@@ -9,6 +9,7 @@ add_executable(ffmpegkit_tests
     session_id_callback_test.cpp
     wasm_callback_dispatcher_test.cpp
     session_completion_test.cpp
+    session_log_delivery_test.cpp
     log_statistics_test.cpp
     cancellation_race_test.cpp
     ../src/WasmCallbackDispatcher.cpp

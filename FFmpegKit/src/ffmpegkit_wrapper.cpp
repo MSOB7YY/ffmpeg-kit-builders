@@ -1926,6 +1926,31 @@ FFmpegKitLogLevel DLL_ALIGN ffmpeg_kit_config_get_log_level(void) {
   }
 }
 
+void DLL_ALIGN ffmpeg_kit_config_set_log_redirection_strategy(
+    FFmpegKitLogRedirectionStrategy strategy) {
+  try {
+    FFmpegKitConfig::setLogRedirectionStrategy(
+        (LogRedirectionStrategy)strategy);
+  } catch (const std::exception &e) {
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_set_log_redirection_strategy: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+  }
+}
+
+FFmpegKitLogRedirectionStrategy DLL_ALIGN
+ffmpeg_kit_config_get_log_redirection_strategy(void) {
+  try {
+    return (FFmpegKitLogRedirectionStrategy)
+        FFmpegKitConfig::getLogRedirectionStrategy();
+  } catch (const std::exception &e) {
+    std::cerr << "[" << getCurrentTimeStamp() << "] [ffmpeg-kit] [Exception] in ffmpeg_kit_config_get_log_redirection_strategy: " << e.what()
+              << std::endl;
+    PRINT_STACK_TRACE();
+    return FFMPEG_KIT_LOG_REDIRECTION_STRATEGY_PRINT_LOGS_WHEN_NO_CALLBACK_DEFINED;
+  }
+}
+
 char * DLL_ALIGN ffmpeg_kit_config_log_level_to_string(FFmpegKitLogLevel level) {
   try {
     return strdup_cpp(FFmpegKitConfig::logLevelToString((Level)level));

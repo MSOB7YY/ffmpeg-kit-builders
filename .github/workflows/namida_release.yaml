@@ -1,0 +1,137 @@
+name: namida_release
+
+# Builds the namida bundle (base, small, LGPL, plus zlib and dav1d, without
+# ffplay/SDL2) for every platform namida ships, and publishes it as the
+# v<version>-<platform> releases ffmpeg_kit_extended_flutter downloads.
+#
+# Needs the Linux builder image of this repository: run builder_image once
+# (and again when .devcontainer changes) before this workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Comma-separated platforms to build"
+        required: true
+        default: "android,ios,macos,linux,windows"
+        type: string
+      run_tests:
+        description: "Run the native test suite on Linux before building"
+        required: false
+        default: true
+        type: boolean
+      builder_image:
+        description: "Linux builder image (lowercase owner)"
+        required: true
+        default: "ghcr.io/msob7yy/ffmpeg-kit-builders-dev:latest"
+        type: string
+      deps_fallback_repository:
+        description: "Repository whose dependency releases are used when this one has none"
+        required: false
+        default: "akashskypatel/ffmpeg-kit-builders"
+        type: string
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: namida-release
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    if: ${{ inputs.run_tests }}
+    uses: ./.github/workflows/build_on_linux.yaml
+    secrets: inherit
+    with:
+      bundles: debug
+      build_bundle: true
+      is_ci: true
+      run_tests: true
+      target_platforms: linux
+      target_archs: x86_64
+      builder_image: ${{ inputs.builder_image }}
+      deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
+
+  android:
+    needs: tests
+    if: ${{ !failure() && !cancelled() && contains(inputs.platforms, 'android') }}
+    uses: ./.github/workflows/build_on_linux.yaml
+    secrets: inherit
+    with:
+      bundles: namida
+      build_bundle: true
+      is_ci: false
+      target_platforms: android
+      target_archs: aarch64,armv7a,x86_64
+      licenses: lgpl
+      small: small
+      release_discussion_category: ""
+      builder_image: ${{ inputs.builder_image }}
+      deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
+
+  linux:
+    needs: tests
+    if: ${{ !failure() && !cancelled() && contains(inputs.platforms, 'linux') }}
+    uses: ./.github/workflows/build_on_linux.yaml
+    secrets: inherit
+    with:
+      bundles: namida
+      build_bundle: true
+      is_ci: false
+      target_platforms: linux
+      target_archs: x86_64
+      licenses: lgpl
+      small: small
+      release_discussion_category: ""
+      builder_image: ${{ inputs.builder_image }}
+      deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
+
+  windows:
+    needs: tests
+    if: ${{ !failure() && !cancelled() && contains(inputs.platforms, 'windows') }}
+    uses: ./.github/workflows/build_on_linux.yaml
+    secrets: inherit
+    with:
+      bundles: namida
+      build_bundle: true
+      is_ci: false
+      target_platforms: windows
+      target_archs: x86_64
+      licenses: lgpl
+      small: small
+      release_discussion_category: ""
+      builder_image: ${{ inputs.builder_image }}
+      deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
+
+  ios:
+    needs: tests
+    if: ${{ !failure() && !cancelled() && contains(inputs.platforms, 'ios') }}
+    uses: ./.github/workflows/build_on_macos.yaml
+    secrets: inherit
+    with:
+      bundles: namida
+      build_bundle: true
+      is_ci: false
+      target_platforms: ios
+      target_archs: aarch64
+      licenses: lgpl
+      small: small
+      release_discussion_category: ""
+      deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
+
+  macos:
+    needs: tests
+    if: ${{ !failure() && !cancelled() && contains(inputs.platforms, 'macos') }}
+    uses: ./.github/workflows/build_on_macos.yaml
+    secrets: inherit
+    with:
+      bundles: namida
+      build_bundle: true
+      is_ci: false
+      target_platforms: macos
+      target_archs: aarch64,x86_64
+      licenses: lgpl
+      small: small
+      release_discussion_category: ""
+      deps_fallback_repository: ${{ inputs.deps_fallback_repository }}

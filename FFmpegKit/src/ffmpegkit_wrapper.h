@@ -1165,6 +1165,26 @@ ffmpeg_kit_config_set_log_level(FFmpegKitLogLevel level);
 FFMPEG_KIT_C_EXPORT FFmpegKitLogLevel ffmpeg_kit_config_get_log_level(void);
 
 /**
+ * Sets when session logs are also printed to the console (stdout, logcat on
+ * Android). Sessions created afterwards use it.
+ *
+ * Defaults to printing them when no log callback is defined, which prints
+ * every line of a session nobody listens to.
+ *
+ * @param strategy the strategy to use
+ */
+FFMPEG_KIT_C_EXPORT void ffmpeg_kit_config_set_log_redirection_strategy(
+    FFmpegKitLogRedirectionStrategy strategy);
+
+/**
+ * Gets the strategy new sessions use to print their logs to the console.
+ *
+ * @return the log redirection strategy
+ */
+FFMPEG_KIT_C_EXPORT FFmpegKitLogRedirectionStrategy
+ffmpeg_kit_config_get_log_redirection_strategy(void);
+
+/**
  * Converts the log level to a string.
  *
  * @param level the log level to convert

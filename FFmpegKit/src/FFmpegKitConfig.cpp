@@ -243,6 +243,15 @@ static std::atomic<long> activeFFplaySessionId(0);
 static std::atomic<short> sessionMap[SESSION_MAP_SIZE];
 static std::atomic<int> sessionInTransitMessageCountMap[SESSION_MAP_SIZE];
 static std::atomic<int> unattributedMessagesInTransitCount{0};
+/**
+ * Log level each running session asked for with -loglevel/-v, by session slot.
+ *
+ * av_log's level is process wide, so sessions setting it raced: one session
+ * finishing restored the configured level while another quiet session was still
+ * running, and that session's output got the other level's logs mixed in.
+ */
+static constexpr int SessionLogLevelUnset = INT_MIN;
+static std::atomic<int> sessionLogLevelMap[SESSION_MAP_SIZE];
 static std::mutex &getSessionMessageDrainMutex() {
   static auto *mutex = new std::mutex();
   return *mutex;
@@ -251,7 +260,17 @@ static std::condition_variable &getSessionMessageDrainMonitor() {
   static auto *monitor = new std::condition_variable();
   return *monitor;
 }
+/**
+ * Wakes threads waiting for a session's messages to drain.
+ *
+ * The drain counters are atomics updated outside the drain mutex, so the mutex
+ * is taken before notifying. A waiter is then either still before its predicate
+ * check (and sees the new count) or already blocked (and gets the notify).
+ * Notifying without it loses the wakeup and the waiter sleeps for its whole
+ * timeout (5 seconds for session output).
+ */
 static void notifySessionMessageDrain() {
+  { std::lock_guard<std::mutex> lock(getSessionMessageDrainMutex()); }
   getSessionMessageDrainMonitor().notify_all();
 }
 
@@ -716,18 +735,24 @@ void addSessionToSessionHistory(
  */
 class CallbackData {
 public:
-  CallbackData(const long sessionId, const int logLevel, const AVBPrint *data)
-      : _type{LogType}, _sessionId{sessionId}, _logLevel{logLevel} {
+  CallbackData(const long sessionId,
+               std::shared_ptr<ffmpegkit::Session> session, const int logLevel,
+               const AVBPrint *data)
+      : _type{LogType}, _sessionId{sessionId}, _session{std::move(session)},
+        _logLevel{logLevel} {
     av_bprint_init(&_logData, 0, AV_BPRINT_SIZE_UNLIMITED);
     av_bprintf(&_logData, "%s", data->str);
   }
 
-  CallbackData(const long sessionId, const int videoFrameNumber,
-               const float videoFps, const float videoQuality,
-               const int64_t size, const double timeElapsed, const double time,
+  CallbackData(const long sessionId,
+               std::shared_ptr<ffmpegkit::Session> session,
+               const int videoFrameNumber, const float videoFps,
+               const float videoQuality, const int64_t size,
+               const double timeElapsed, const double time,
                const double bitrate, const double speed,
                const int64_t dupFrames, const int64_t dropFrames)
       : _type{StatisticsType}, _sessionId{sessionId},
+        _session{std::move(session)},
         _statisticsFrameNumber{videoFrameNumber}, _statisticsFps{videoFps},
         _statisticsQuality{videoQuality}, _statisticsSize{size},
         _statisticsTimeElapsed{timeElapsed}, _statisticsTime{time},
@@ -744,6 +769,8 @@ public:
   CallbackType getType() { return _type; }
 
   long getSessionId() { return _sessionId; }
+
+  const std::shared_ptr<ffmpegkit::Session> &getSession() { return _session; }
 
   int getLogLevel() { return _logLevel; }
 
@@ -772,6 +799,9 @@ public:
 private:
   CallbackType _type;
   long _sessionId; // session id
+  // Resolved when the message is queued: a session can leave the history
+  // before the callback thread gets to its last messages.
+  std::shared_ptr<ffmpegkit::Session> _session;
 
   int _logLevel;     // log level
   AVBPrint _logData; // log data
@@ -793,16 +823,31 @@ private:
  *
  * @param milliSeconds wait time in milliseconds
  */
+static bool callbackDataPending() {
+  std::lock_guard<KitMutex> lock(getCallbackDataMutex());
+  return !getCallbackDataList().empty();
+}
+
 static void callbackWait(int milliSeconds) {
   std::unique_lock<std::mutex> callbackLock{getCallbackMutex()};
-  getCallbackMonitor().wait_for(callbackLock,
-                                std::chrono::milliseconds(milliSeconds));
+  getCallbackMonitor().wait_for(
+      callbackLock, std::chrono::milliseconds(milliSeconds), [] {
+        return callbackDataPending() ||
+               !redirectionEnabled.load(std::memory_order_acquire);
+      });
 }
 
 /**
  * Notifies threads waiting on callback semaphore.
+ *
+ * Takes the callback mutex first, for the same reason as
+ * notifySessionMessageDrain: without it, data pushed between the consumer's
+ * empty check and its wait is only picked up after the wait times out.
  */
-static void callbackNotify() { getCallbackMonitor().notify_one(); }
+static void callbackNotify() {
+  { std::lock_guard<std::mutex> lock(getCallbackMutex()); }
+  getCallbackMonitor().notify_one();
+}
 
 static const char *avutil_log_get_level_str(int level) {
   switch (level) {
@@ -939,24 +984,60 @@ static void avutil_log_redact_url_secrets(char *line) {
 }
 #endif
 
+static int effectiveLogLevel(long sessionId) {
+  if (sessionId != 0) {
+    const int level = std::atomic_load_explicit(
+        &sessionLogLevelMap[sessionId % SESSION_MAP_SIZE],
+        std::memory_order_relaxed);
+    if (level != SessionLogLevelUnset) {
+      return level;
+    }
+  }
+  return av_log_get_level();
+}
+
+/**
+ * Stores the log level a session's -loglevel/-v option asked for.
+ *
+ * @return 1 when the calling thread runs a session, 0 when the caller should
+ * set av_log's process wide level instead
+ */
+extern "C" int ffmpegkit_set_session_log_level(int level) {
+  const long sessionId =
+      (tlsSession != nullptr) ? tlsSession->getSessionId() : tlsSessionId;
+  if (sessionId == 0) {
+    return 0;
+  }
+  std::atomic_store(&sessionLogLevelMap[sessionId % SESSION_MAP_SIZE], level);
+  return 1;
+}
+
+/**
+ * Resolves the session a message belongs to while it is still running. Threads
+ * FFmpeg starts for a session only carry its id, so those are looked up here,
+ * before the session can leave the history.
+ */
+static std::shared_ptr<ffmpegkit::Session>
+resolveMessageSession(const std::shared_ptr<ffmpegkit::Session> &threadSession,
+                      long sessionId) {
+  if (threadSession != nullptr) {
+    return threadSession;
+  }
+  if (sessionId == 0) {
+    return nullptr;
+  }
+  return ffmpegkit::FFmpegKitConfig::getSession(sessionId);
+}
+
 /**
  * Adds log data to the end of callback data list.
  *
  * @param level log level
  * @param data log data
  */
-static void logCallbackDataAdd(int level, AVBPrint *data) {
-  std::shared_ptr<ffmpegkit::Session> currentSession = tlsSession;
-  long sessionId =
-      (currentSession != nullptr) ? currentSession->getSessionId() : tlsSessionId;
-
-  if (currentSession == nullptr && sessionId == 0) {
-    long ffplaySessionId = globalFFplaySessionId.load();
-    if (ffplaySessionId != 0) {
-      currentSession = ffmpegkit::FFmpegKitConfig::getSession(ffplaySessionId);
-      sessionId = ffplaySessionId;
-    }
-  }
+static void logCallbackDataAdd(long sessionId,
+                               std::shared_ptr<ffmpegkit::Session> currentSession,
+                               int level, AVBPrint *data) {
 
   if (currentSession != nullptr) {
     currentSession->debugLog(
@@ -965,7 +1046,8 @@ static void logCallbackDataAdd(int level, AVBPrint *data) {
   }
 
   std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
-  CallbackData *callbackData = new CallbackData(sessionId, level, data);
+  CallbackData *callbackData =
+      new CallbackData(sessionId, std::move(currentSession), level, data);
 
   if (sessionId == 0) {
     std::atomic_fetch_add(&unattributedMessagesInTransitCount, 1);
@@ -1012,9 +1094,10 @@ static void statisticsCallbackDataAdd(int frameNumber, float fps, float quality,
   }
   
   std::unique_lock<KitMutex> lock(getCallbackDataMutex(), std::defer_lock);
-  CallbackData *callbackData =
-      new CallbackData(sessionId, frameNumber, fps, quality, size, timeElapsed,
-                       time, bitrate, speed, dupFrames, dropFrames);
+  CallbackData *callbackData = new CallbackData(
+      sessionId, resolveMessageSession(currentSession, sessionId), frameNumber,
+      fps, quality, size, timeElapsed, time, bitrate, speed, dupFrames,
+      dropFrames);
 
   if (sessionId == 0) {
     std::atomic_fetch_add(&unattributedMessagesInTransitCount, 1);
@@ -1054,6 +1137,8 @@ static CallbackData *callbackDataRemove() {
  */
 static void registerSessionId(long sessionId) {
   av_log(nullptr, AV_LOG_DEBUG, "registerSessionId session_id=%ld\n", sessionId);
+  std::atomic_store(&sessionLogLevelMap[sessionId % SESSION_MAP_SIZE],
+                    SessionLogLevelUnset);
   std::atomic_store(&sessionMap[sessionId % SESSION_MAP_SIZE], (short)1);
 }
 
@@ -1177,7 +1262,7 @@ void ffmpegkit_log_callback_function(void *ptr, int level, const char *format,
   if (level >= 0) {
     level &= 0xff;
   }
-  int activeLogLevel = av_log_get_level();
+  int activeLogLevel = effectiveLogLevel(sessionId);
 
   // LevelAVLogStdErr logs are always redirected
   if ((activeLogLevel == ffmpegkit::LevelAVLogQuiet &&
@@ -1202,7 +1287,9 @@ void ffmpegkit_log_callback_function(void *ptr, int level, const char *format,
 #endif
 
   if (fullLine.len > 0) {
-    logCallbackDataAdd(level, &fullLine);
+    logCallbackDataAdd(sessionId,
+                       resolveMessageSession(currentSession, sessionId), level,
+                       &fullLine);
   }
 
   av_bprint_finalize(part, NULL);
@@ -1233,9 +1320,9 @@ void ffmpegkit_statistics_callback_function(int frameNumber, float fps,
                             bitrate, speed, dupFrames, dropFrames);
 }
 
-static void process_log(long sessionId, int levelValueInt,
-                        AVBPrint *logMessage) {
-  int activeLogLevel = av_log_get_level();
+static void process_log(long sessionId,
+                        const std::shared_ptr<ffmpegkit::Session> &session,
+                        int levelValueInt, AVBPrint *logMessage) {
   ffmpegkit::Level levelValue = static_cast<ffmpegkit::Level>(levelValueInt);
   std::shared_ptr<ffmpegkit::Log> log =
       std::make_shared<ffmpegkit::Log>(sessionId, levelValue, logMessage->str);
@@ -1244,15 +1331,8 @@ static void process_log(long sessionId, int levelValueInt,
   ffmpegkit::LogRedirectionStrategy activeLogRedirectionStrategy =
       globalLogRedirectionStrategy;
 
-  // LevelAVLogStdErr logs are always redirected
-  if ((activeLogLevel == ffmpegkit::LevelAVLogQuiet &&
-       levelValue != ffmpegkit::LevelAVLogStdErr) ||
-      (levelValue > activeLogLevel)) {
-    // LOG NEITHER PRINTED NOR FORWARDED
-    return;
-  }
-
-  auto session = ffmpegkit::FFmpegKitConfig::getSession(sessionId);
+  // the level was already filtered when the message was queued, with the
+  // level of the session that logged it
   if (session != nullptr) {
     activeLogRedirectionStrategy = session->getLogRedirectionStrategy();
     session->addLog(log);
@@ -1328,7 +1408,9 @@ static void process_log(long sessionId, int levelValueInt,
   }
 }
 
-void process_statistics(long sessionId, int videoFrameNumber, float videoFps,
+void process_statistics(long sessionId,
+                        const std::shared_ptr<ffmpegkit::Session> &session,
+                        int videoFrameNumber, float videoFps,
                         float videoQuality, long size, double timeElapsed,
                         double time, double bitrate, double speed,
                         int64_t dupFrames, int64_t dropFrames) {
@@ -1337,7 +1419,6 @@ void process_statistics(long sessionId, int videoFrameNumber, float videoFps,
           sessionId, videoFrameNumber, videoFps, videoQuality, size,
           timeElapsed, time, bitrate, speed, dupFrames, dropFrames);
 
-  auto session = ffmpegkit::FFmpegKitConfig::getSession(sessionId);
   if (session != nullptr && session->isFFmpeg()) {
     std::shared_ptr<ffmpegkit::FFmpegSession> ffmpegSession =
         std::static_pointer_cast<ffmpegkit::FFmpegSession>(session);
@@ -1393,24 +1474,28 @@ void *callbackThreadFunction(void *pointer) {
         struct CallbackDrainGuard {
           long sessionId;
           ~CallbackDrainGuard() {
-            if (sessionId == 0) {
-              std::atomic_fetch_sub(&unattributedMessagesInTransitCount, 1);
-            } else {
-              std::atomic_fetch_sub(
-                  &sessionInTransitMessageCountMap[sessionId %
-                                                   SESSION_MAP_SIZE],
-                  1);
+            const int remaining =
+                (sessionId == 0)
+                    ? std::atomic_fetch_sub(&unattributedMessagesInTransitCount,
+                                            1) - 1
+                    : std::atomic_fetch_sub(
+                          &sessionInTransitMessageCountMap[sessionId %
+                                                           SESSION_MAP_SIZE],
+                          1) - 1;
+            // waiters only wait for a count to reach zero
+            if (remaining <= 0) {
+              notifySessionMessageDrain();
             }
-            notifySessionMessageDrain();
           }
         } drainGuard{sessionId};
 
         if (callbackGuard->getType() == LogType) {
-          process_log(sessionId, callbackGuard->getLogLevel(),
-                      callbackGuard->getLogData());
+          process_log(sessionId, callbackGuard->getSession(),
+                      callbackGuard->getLogLevel(), callbackGuard->getLogData());
         } else {
 
-          process_statistics(sessionId, callbackGuard->getStatisticsFrameNumber(),
+          process_statistics(sessionId, callbackGuard->getSession(),
+                             callbackGuard->getStatisticsFrameNumber(),
                              callbackGuard->getStatisticsFps(),
                              callbackGuard->getStatisticsQuality(),
                              callbackGuard->getStatisticsSize(),
@@ -1584,7 +1669,8 @@ int executeFFprobe(const std::shared_ptr<ffmpegkit::AbstractSession> &session,
       // Inject into the log system so MediaInformationJsonParser can find it
       // Use LevelAVLogStdErr as that is what MediaInformationSession listens
       // for
-      logCallbackDataAdd(ffmpegkit::LevelAVLogStdErr, &bprint);
+      logCallbackDataAdd(sessionId, session, ffmpegkit::LevelAVLogStdErr,
+                         &bprint);
 
       av_bprint_finalize(&bprint, NULL);
       av_free(output);
@@ -1770,6 +1856,7 @@ void *ffmpegKitInitialize() {
     for (int i = 0; i < SESSION_MAP_SIZE; i++) {
       std::atomic_init(&sessionMap[i], (short)0);
       std::atomic_init(&sessionInTransitMessageCountMap[i], 0);
+      std::atomic_init(&sessionLogLevelMap[i], SessionLogLevelUnset);
     }
     std::atomic_init(&unattributedMessagesInTransitCount, 0);
 

@@ -52,8 +52,6 @@
 #include "libavutil/stereo3d.h"
 #include "graph/graphprint.h"
 
-#include "SDL_mutex.h"
-
 FFMPEG_THREAD_LOCAL HWDevice *filter_hw_device;
 
 static InputFile *input_file_checked(int file_idx)

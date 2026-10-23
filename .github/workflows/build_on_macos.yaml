@@ -38,6 +38,26 @@ on:
         required: true
         type: boolean
         default: false
+      licenses:
+        description: "Comma-separated licenses to build (lgpl,gpl), empty builds every license"
+        required: false
+        default: ""
+        type: string
+      small:
+        description: "small, not-small or both, empty builds both"
+        required: false
+        default: ""
+        type: string
+      deps_fallback_repository:
+        description: "owner/repo whose dependency releases are used when this repository has none"
+        required: false
+        default: ""
+        type: string
+      release_discussion_category:
+        description: "Discussion category of created releases, empty for repositories without discussions"
+        required: false
+        default: "Releases"
+        type: string
   workflow_dispatch:
     inputs:
       target_platforms:
@@ -85,6 +105,26 @@ on:
         required: true
         default: false
         type: boolean
+      licenses:
+        description: "Comma-separated licenses to build (lgpl,gpl), empty builds every license"
+        required: false
+        default: ""
+        type: string
+      small:
+        description: "small, not-small or both, empty builds both"
+        required: false
+        default: ""
+        type: string
+      deps_fallback_repository:
+        description: "owner/repo whose dependency releases are used when this repository has none"
+        required: false
+        default: ""
+        type: string
+      release_discussion_category:
+        description: "Discussion category of created releases, empty for repositories without discussions"
+        required: false
+        default: "Releases"
+        type: string
       run_tests:
         description: "Run tests - Only runs macOS tests when CI is true"
         required: false
@@ -119,6 +159,10 @@ env:
   RUN_TESTS: ${{ inputs.run_tests }}
   TEST_FILTER: ${{ inputs.test_filter }}
   TEST_TYPE: ${{ inputs.test_type }}
+  WORKFLOW_LICENSES: ${{ inputs.licenses }}
+  WORKFLOW_SMALL: ${{ inputs.small }}
+  DEPS_FALLBACK_REPOSITORY: ${{ inputs.deps_fallback_repository }}
+  RELEASE_DISCUSSION_CATEGORY: ${{ inputs.release_discussion_category }}
 
 permissions:
   contents: write

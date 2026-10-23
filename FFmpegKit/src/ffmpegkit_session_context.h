@@ -9,6 +9,8 @@ void ffmpegkit_bind_session_id(long session_id);
 void ffmpegkit_unbind_session_id(void);
 void ffmpegkit_register_root_context(const void *root, long session_id);
 void ffmpegkit_unregister_root_context(const void *root);
+/* Returns 1 when the level was stored for the calling thread's session. */
+int ffmpegkit_set_session_log_level(int level);
 
 #ifdef __cplusplus
 }

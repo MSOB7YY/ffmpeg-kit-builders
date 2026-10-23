@@ -28,6 +28,20 @@ If you like the project and are using it in your app give it a ⭐ on [ffmpeg-ki
 
 Cross-platform build system for FFmpeg and FFmpegKit supporting Windows, Linux, MacOS, iOS, and Android platforms.
 
+## namida fork
+
+This fork builds the `namida` bundle that [namida](https://github.com/namidaco/namida) uses through its [ffmpeg_kit_extended_flutter fork](https://github.com/MSOB7YY/ffmpeg-kit-extended). The bundle is the base bundle (small, LGPL) with zlib and dav1d added, and without SDL2 and ffplay. The ffplay API stays exported, but playback always fails.
+
+The fork also fixes session log delivery (5 second waits, output mixed between parallel sessions, and output lost in parallel sessions). The changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+### Publishing the bundle
+
+1. Run the `builder_image` workflow once. It publishes the Linux builder image to `ghcr.io/<owner>/ffmpeg-kit-builders-dev`. Make that package public, or give this repository read access to it.
+2. Run the `namida_release` workflow. It runs the native tests on Linux, then builds the bundle for Android, iOS, macOS, Windows and Linux and uploads it to the `v<version>-<platform>` releases.
+
+> [!NOTE]
+> Dependencies this repository has no releases of are taken from the upstream releases (the `deps_fallback_repository` input), so only FFmpeg and FFmpegKit get built.
+
 ## Features
 
 - **Latest FFmpeg API** - [Uses the latest FFmpeg API v9.0.2](https://www.ffmpeg.org/download.html).

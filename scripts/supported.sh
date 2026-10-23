@@ -15,7 +15,7 @@ fi
 
 : "${LOG_FILE:=/dev/null}"
 
-export VALID_BUNDLES=("full" "video_hw" "video" "audio" "base" "debug")
+export VALID_BUNDLES=("full" "video_hw" "video" "audio" "base" "debug" "namida")
 export VALID_BUILD_ON_LINUX=("linux" "windows" "android" "wasm")
 export VALID_BUILD_ON_MACOS=("ios" "iphonesimulator" "appletvos" "appletvsimulator" "macos")
 export VALID_ARCHS=("x86_64" "aarch64" "armv7a" "wasm32")

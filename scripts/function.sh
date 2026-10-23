@@ -1754,7 +1754,9 @@ get_bundle_directory() {
 }
 
 get_bundle_type() {
-  if truthy "$enable_base"; then
+  if truthy "$namida_bundle"; then
+    echo "namida"
+  elif truthy "$enable_base"; then
     echo "base"
   elif truthy "$audio_bundle"; then
     echo "audio"
@@ -8346,6 +8348,13 @@ create_github_release() {
   release_notes="$(get_changes_from_changelog)"
   target_commit="$(git rev-parse HEAD)"
 
+  # repos without discussions (forks by default) set RELEASE_DISCUSSION_CATEGORY to empty
+  local discussion_args=()
+  local discussion_category="${RELEASE_DISCUSSION_CATEGORY-Releases}"
+  if [[ -n "$discussion_category" ]]; then
+    discussion_args=(--discussion-category "$discussion_category")
+  fi
+
   # Let GitHub create the tag at the current commit. This avoids relying on the
   # checkout action's persisted Git credential after a long-running build.
   if github_gh release create "$tag" \
@@ -8354,7 +8363,7 @@ create_github_release() {
       --title "$tag" \
       --notes "$release_notes" \
       --prerelease \
-      --discussion-category "Releases" \
+      "${discussion_args[@]}" \
       --generate-notes \
       --latest >>"$LOG_FILE" 2>&1; then
     echo "Release $tag created successfully." | tee -a "$LOG_FILE"

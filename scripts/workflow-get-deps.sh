@@ -142,6 +142,21 @@ else
 	read -r -a dependency_items <<< "$dependencies"
 fi
 
+# a fork without dependency releases of its own can fetch its upstream's (DEPS_FALLBACK_REPOSITORY)
+download_dependency_asset() {
+	local source_repo
+	for source_repo in "$repo" ${DEPS_FALLBACK_REPOSITORY:+"$DEPS_FALLBACK_REPOSITORY"}; do
+		if github_gh release download "$release_tag" \
+			--repo "$source_repo" \
+			--pattern "$asset_pattern" \
+			--dir "$download_dir" >>"$LOG_FILE" 2>&1; then
+			echo "Fetched ${asset_pattern} from ${source_repo}"
+			return 0
+		fi
+	done
+	return 1
+}
+
 libraries_dir="${workspace}/prebuilt/${platform}-${arch}/libraries"
 release_tag="${platform}-${arch}-deps"
 release_name="${platform}-${arch}-dependencies"
@@ -164,10 +179,7 @@ for dependency in "${dependency_items[@]}"; do
 	echo "Fetching from release '${release_name}' (${release_tag}) using asset pattern '${asset_pattern}'"
 
 	download_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/workflow-get-deps.XXXXXX")"
-	if ! github_gh release download "$release_tag" \
-		--repo "$repo" \
-		--pattern "$asset_pattern" \
-		--dir "$download_dir" >>"$LOG_FILE" 2>&1; then
+	if ! download_dependency_asset; then
 		echo "Failed to download dependency artifact pattern: ${asset_pattern}" >&2
 		rm -rf "$download_dir"
 		exit 3

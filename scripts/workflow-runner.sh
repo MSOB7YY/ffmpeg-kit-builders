@@ -245,6 +245,24 @@ read_workflow_bundles() {
   done
 }
 
+# build_all.sh license and small selection (WORKFLOW_LICENSES, WORKFLOW_SMALL=small|not-small|both).
+# Unset keeps its default of every license, small and not small.
+read_workflow_variant_args() {
+  local -n out_args="$1"
+  out_args=()
+  if [[ -n "${WORKFLOW_LICENSES:-}" ]]; then
+    out_args+=(--license="${WORKFLOW_LICENSES}")
+  fi
+  case "${WORKFLOW_SMALL:-}" in
+    "") ;;
+    small|not-small|both) out_args+=(--"${WORKFLOW_SMALL}") ;;
+    *)
+      echo "::error::WORKFLOW_SMALL must be small, not-small or both, got '${WORKFLOW_SMALL}'" >&2
+      return 1
+      ;;
+  esac
+}
+
 get_simulator_companion_platform() {
   local platform="$1"
   case "$platform" in
@@ -462,10 +480,13 @@ workflow_build_ffmpeg() {
     return 1
   fi
 
+  local variant_args=()
+  read_workflow_variant_args variant_args || exit 1
+
   while IFS= read -r bundle; do
     [[ -z "$bundle" ]] && continue
     echo "::notice::Building ffmpeg for $combo bundle $bundle"
-    if ! run_with_runner_shell ./scripts/build_all.sh --platform="${combo}" --build=ffmpeg --bundle="$bundle"; then
+    if ! run_with_runner_shell ./scripts/build_all.sh --platform="${combo}" --build=ffmpeg --bundle="$bundle" "${variant_args[@]}"; then
       echo "::error::Failed to build ffmpeg for $combo bundle $bundle"
       exit 1
     fi
@@ -567,6 +588,9 @@ workflow_step_build_bundle_batches() {
       if [[ -n "${WORKFLOW_BUNDLES:-}" ]]; then
         build_all_args+=(--bundle="${WORKFLOW_BUNDLES}")
       fi
+      local variant_args=()
+      read_workflow_variant_args variant_args || return 1
+      build_all_args+=("${variant_args[@]}")
     fi
 
     echo "::notice::Building bundle batch for $platform platforms: $combo_csv"

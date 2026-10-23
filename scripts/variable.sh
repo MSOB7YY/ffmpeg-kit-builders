@@ -134,6 +134,13 @@ CONFIG_BASE="\
 --enable-libjsoncpp \
 --enable-sdl2"
 
+# base for a music player: zlib for png, dav1d for av1, no ffplay (sdl2, alsa)
+CONFIG_NAMIDA="\
+--enable-zlib \
+--enable-libdav1d \
+--disable-sdl2 \
+--disable-alsa"
+
 # must pick crypto type for streaming support
 CONFIG_STREAMING="\
 --enable-libsrt \

@@ -528,6 +528,11 @@ while [ $# -gt 0 ]; do
     export enable_base=y
     shift
     ;;
+  --namida-bundle|--enable-namida)
+    export enable_base=y
+    export namida_bundle=y
+    shift
+    ;;
   --audio-bundle)
     export audio_bundle=y
     shift
@@ -951,6 +956,8 @@ check_gpl_libraries
 
 # disable unsupported by platform
 disable_unsupported
+
+if truthy "$namida_bundle"; then apply_preset "$CONFIG_NAMIDA"; fi
 
 echo -e "\n  [CONFIG] Enabling explicit libraries..." >>"$LOG_FILE"
 for lib in "${explicit_enabled[@]}"; do
