@@ -325,10 +325,14 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
     )
 
     # Linker hardening (RELRO and Bind Now)
+    # -Bsymbolic: the exported av*/sws*/swr* calls inside the library bind to its own
+    # FFmpeg. Otherwise a system FFmpeg already in the global scope (pulled in by libmpv
+    # for example) takes them over, and its ABI differs. FFmpeg's own shared libs do the same.
     target_link_options(ffmpegkit PRIVATE
         "-Wl,-z,relro"
         "-Wl,-z,now"
         "-Wl,-z,noexecstack"
+        "-Wl,-Bsymbolic"
         "-Wl,--warn-common"
         "-Wl,--no-warn-mismatch"
     )
@@ -403,10 +407,12 @@ elseif(ANDROID)
     )
 
     # Linker flags for Android (using LLD)
+    # -Bsymbolic: same as Linux, the library's own FFmpeg calls never resolve elsewhere
     target_link_options(ffmpegkit PRIVATE
         "-Wl,-z,relro"
         "-Wl,-z,now"
         "-Wl,-z,noexecstack"
+        "-Wl,-Bsymbolic"
         "-Wl,--warn-shared-textrel"
         "-Wl,--fatal-warnings"
         "-Wl,--allow-multiple-definition"

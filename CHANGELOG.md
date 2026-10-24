@@ -1,5 +1,11 @@
 # FFmpegKit Changelog
 
+## Version 0.11.3
+
+- namida fork: Linux and Android link `libffmpegkit` with `-Bsymbolic`, so its
+  own FFmpeg calls never resolve to another FFmpeg loaded in the same process
+  (a system one pulled in by libmpv for example).
+
 ## Version 0.11.2
 
 - namida fork: getting a session's output no longer waits for the full 5 second
