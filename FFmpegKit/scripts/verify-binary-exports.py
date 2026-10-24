@@ -225,7 +225,7 @@ def anchors(args):
         return []
     prefix = "_" if args.platform == "apple" else ""
     required = ["ffmpeg_kit_initialize", "ffmpeg_kit_execute", "ffmpeg_kit_set_log_callback"]
-    if args.platform in ("linux", "android"):
+    if args.platform in ("linux", "android", "apple"):
         required += ["avcodec_version", "avformat_version", "avutil_version", "swresample_version", "swscale_version"]
     if args.platform == "android":
         required += ["JNI_OnLoad"]

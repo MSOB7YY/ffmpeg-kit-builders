@@ -1,5 +1,11 @@
 # FFmpegKit Changelog
 
+## Version 0.11.4
+
+- namida fork: the macOS and iOS frameworks export the FFmpeg API (`av*`,
+  `swr*`, `sws*`) like the Linux and Android libraries, so native code can
+  link against them.
+
 ## Version 0.11.3
 
 - namida fork: Linux and Android link `libffmpegkit` with `-Bsymbolic`, so its

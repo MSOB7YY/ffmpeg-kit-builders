@@ -680,12 +680,17 @@ if(BUILD_SHARED_LIBS)
     elseif(APPLE)
         # Darwin exported symbols allow-list.
         #
-        # Export the low-level embedded CLI C APIs as well as the higher-level
-        # ffmpeg-kit C API. Keep the underscore delimiter in these patterns:
+        # Export the FFmpeg libraries' own API (the same av*/swr*/sws* as the
+        # ELF version script, for native code linking libffmpegkit), the
+        # low-level embedded CLI C APIs and the higher-level ffmpeg-kit C API.
+        # Keep the underscore delimiter in these patterns:
         # _ffmpeg_* matches ffmpeg_init/ffmpeg_run/ffmpeg_kit_* but does not
         # match private symbols such as _ffmpegkit_lzma_*.
         set(APPLE_EXPORTED_SYMBOLS "${CMAKE_CURRENT_BINARY_DIR}/ffmpegkit-exported-symbols.txt")
         file(WRITE "${APPLE_EXPORTED_SYMBOLS}" "
+_av*
+_swr*
+_sws*
 _ffmpeg_*
 _ffprobe_*
 _ffplay_*
