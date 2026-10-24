@@ -333,36 +333,42 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
         "-Wl,--no-warn-mismatch"
     )
 
-    find_path(ALSA_INCLUDE_DIR
-        NAMES alsa/asoundlib.h
-        PATHS
-            "${DEPENDENCY_BUILD_DIR}/include"
-            "${FFMPEG_BUILD_DIR}/include"
-            /usr/include
-            /usr/local/include
+    target_link_libraries(ffmpegkit PRIVATE
+        -lpthread
+        -lm
+        -ldl
     )
-    find_library(ALSA_LIBRARY
-        NAMES asound libasound.a libasound.a.2 libasound.so libasound.so.2 libasound.so.2.0.0
-        PATHS
-            "${DEPENDENCY_BUILD_DIR}/lib"
-            "${FFMPEG_BUILD_DIR}/lib"
-            /usr/lib64
-            /usr/lib
-            /usr/local/lib64
-            /usr/local/lib
-    )
-    if(ALSA_INCLUDE_DIR AND ALSA_LIBRARY)
-        set(ALSA_LIBRARIES "${ALSA_LIBRARY}")
-        set(ALSA_INCLUDE_DIRS "${ALSA_INCLUDE_DIR}")
-        target_link_libraries(ffmpegkit PRIVATE
-            ${ALSA_LIBRARIES}
-            -lpthread
-            -lm
-            -ldl
+
+    # only FFmpeg's alsa devices and SDL2's audio use ALSA
+    set(ALSA_LIBRARIES "")
+    file(STRINGS "${FFMPEG_BUILD_DIR}/include/config.h" FFMPEGKIT_ALSA_USERS
+         REGEX "^#define CONFIG_(ALSA|SDL2) 1$")
+    if(FFMPEGKIT_ALSA_USERS)
+        find_path(ALSA_INCLUDE_DIR
+            NAMES alsa/asoundlib.h
+            PATHS
+                "${DEPENDENCY_BUILD_DIR}/include"
+                "${FFMPEG_BUILD_DIR}/include"
+                /usr/include
+                /usr/local/include
         )
-        target_include_directories(ffmpegkit PRIVATE ${ALSA_INCLUDE_DIRS})
-    else()
-        message(FATAL_ERROR "ALSA not found. Checked DEPENDENCY_BUILD_DIR='${DEPENDENCY_BUILD_DIR}', FFMPEG_BUILD_DIR='${FFMPEG_BUILD_DIR}', and system paths")
+        find_library(ALSA_LIBRARY
+            NAMES asound libasound.a libasound.a.2 libasound.so libasound.so.2 libasound.so.2.0.0
+            PATHS
+                "${DEPENDENCY_BUILD_DIR}/lib"
+                "${FFMPEG_BUILD_DIR}/lib"
+                /usr/lib64
+                /usr/lib
+                /usr/local/lib64
+                /usr/local/lib
+        )
+        if(ALSA_INCLUDE_DIR AND ALSA_LIBRARY)
+            set(ALSA_LIBRARIES "${ALSA_LIBRARY}")
+            target_link_libraries(ffmpegkit PRIVATE ${ALSA_LIBRARIES})
+            target_include_directories(ffmpegkit PRIVATE ${ALSA_INCLUDE_DIR})
+        else()
+            message(FATAL_ERROR "ALSA not found. Checked DEPENDENCY_BUILD_DIR='${DEPENDENCY_BUILD_DIR}', FFMPEG_BUILD_DIR='${FFMPEG_BUILD_DIR}', and system paths")
+        endif()
     endif()
 
     # Allow libffmpegkit.so to find bundled Linux dependencies in the same

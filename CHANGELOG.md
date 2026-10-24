@@ -15,6 +15,8 @@
   requested" after a session with an id like 1000 or 2000 was cancelled.
 - namida fork: bundles other than base build on Linux when FFmpeg uses glibc's
   iconv instead of a built libiconv.
+- namida fork: Linux builds only link ALSA when FFmpeg's alsa devices or SDL2
+  use it, so bundles without them don't need `libasound.so.2`.
 - namida fork: added `ffmpeg_kit_config_set_log_redirection_strategy` and
   `ffmpeg_kit_config_get_log_redirection_strategy`.
 - namida fork: added the `namida` bundle (base, plus zlib and dav1d, without
