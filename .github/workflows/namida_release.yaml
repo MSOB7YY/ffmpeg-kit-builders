@@ -1,8 +1,9 @@
 name: namida_release
 
-# Builds the namida bundle (base, small, LGPL, plus zlib and dav1d, without
+# Builds the namida bundle (base, LGPL, plus zlib and dav1d, without
 # ffplay/SDL2) for every platform namida ships, and publishes it as the
 # v<version>-<platform> releases ffmpeg_kit_extended_flutter downloads.
+# A not-small build adds its bundle (named without `-small`) to the same releases.
 #
 # Needs the Linux builder image of this repository: run builder_image once
 # (and again when .devcontainer changes) before this workflow.
@@ -14,6 +15,14 @@ on:
         required: true
         default: "android,ios,macos,linux,windows"
         type: string
+      small:
+        description: "small (optimized for size) or not-small (optimized for speed)"
+        required: true
+        default: small
+        type: choice
+        options:
+          - small
+          - not-small
       run_tests:
         description: "Run the native test suite on Linux before building"
         required: false
@@ -65,7 +74,7 @@ jobs:
       target_platforms: android
       target_archs: aarch64,armv7a,x86_64
       licenses: lgpl
-      small: small
+      small: ${{ inputs.small }}
       release_discussion_category: ""
       builder_image: ${{ inputs.builder_image }}
       deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
@@ -82,7 +91,7 @@ jobs:
       target_platforms: linux
       target_archs: x86_64
       licenses: lgpl
-      small: small
+      small: ${{ inputs.small }}
       release_discussion_category: ""
       builder_image: ${{ inputs.builder_image }}
       deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
@@ -99,7 +108,7 @@ jobs:
       target_platforms: windows
       target_archs: x86_64
       licenses: lgpl
-      small: small
+      small: ${{ inputs.small }}
       release_discussion_category: ""
       builder_image: ${{ inputs.builder_image }}
       deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
@@ -116,7 +125,7 @@ jobs:
       target_platforms: ios
       target_archs: aarch64
       licenses: lgpl
-      small: small
+      small: ${{ inputs.small }}
       release_discussion_category: ""
       deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
 
@@ -132,6 +141,6 @@ jobs:
       target_platforms: macos
       target_archs: aarch64,x86_64
       licenses: lgpl
-      small: small
+      small: ${{ inputs.small }}
       release_discussion_category: ""
       deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
