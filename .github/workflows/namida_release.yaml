@@ -3,7 +3,8 @@ name: namida_release
 # Builds the namida bundle (base, LGPL, plus zlib and dav1d, without
 # ffplay/SDL2) for every platform namida ships, and publishes it as the
 # v<version>-<platform> releases ffmpeg_kit_extended_flutter downloads.
-# A not-small build adds its bundle (named without `-small`) to the same releases.
+# namida ships not-small (built for speed). A small build adds its bundles
+# (named with `-small`) to the same releases.
 #
 # Needs the Linux builder image of this repository: run builder_image once
 # (and again when .devcontainer changes) before this workflow.
@@ -16,13 +17,13 @@ on:
         default: "android,ios,macos,linux,windows"
         type: string
       small:
-        description: "small (optimized for size) or not-small (optimized for speed)"
+        description: "not-small (optimized for speed, what namida ships) or small (optimized for size)"
         required: true
-        default: small
+        default: not-small
         type: choice
         options:
-          - small
           - not-small
+          - small
       run_tests:
         description: "Run the native test suite on Linux before building"
         required: false
