@@ -1,5 +1,15 @@
 # FFmpegKit Changelog
 
+## Version 0.11.5
+
+- namida fork: the Windows DLL exports the FFmpeg API (`av*`, `swr*`, `sws*`)
+  like the other platforms, and the bundle ships an MSVC import library
+  (`lib/ffmpegkit.lib`) next to the MinGW one, so native code built with MSVC
+  can link against it.
+- namida fork: the Linux library exports its symbols under the `FFMPEGKIT`
+  version, so native code linking against it always calls this FFmpeg, even
+  when a system FFmpeg is loaded in the same process (by libmpv for example).
+
 ## Version 0.11.4
 
 - namida fork: the macOS and iOS frameworks export the FFmpeg API (`av*`,

@@ -560,6 +560,20 @@ if(BUILD_SHARED_LIBS)
                 "-lbcrypt"
                 "-lws2_32"
             )
+
+            # A DLL only exports what is marked dllexport, and the FFmpeg archives mark
+            # nothing. This .def exports their API (the av*/swr*/sws* the ELF version
+            # script exports), so native code can link against it.
+            set(FFMPEG_EXPORTS_DEF "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-exports.def")
+            add_custom_command(
+                OUTPUT "${FFMPEG_EXPORTS_DEF}"
+                COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/ffmpeg-exports-def.sh"
+                        "${CMAKE_NM}" "${FFMPEG_EXPORTS_DEF}" ${FFMPEG_STATIC_LIBS}
+                DEPENDS ${FFMPEG_STATIC_LIBS} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/ffmpeg-exports-def.sh"
+                COMMENT "Listing the FFmpeg API exports..."
+                VERBATIM
+            )
+            target_sources(ffmpegkit PRIVATE "${FFMPEG_EXPORTS_DEF}")
         elseif(CMAKE_SYSTEM_NAME MATCHES "Linux")
             target_link_libraries(ffmpegkit PRIVATE
                 "-Wl,--whole-archive"
@@ -641,9 +655,16 @@ if(BUILD_SHARED_LIBS)
     # Linker Script. Match RTTI owned by FFmpegKit/Json classes with raw ABI
     # prefixes; demangled wildcards also match STL templates containing them.
     # Ensure JNI symbols are kept global in the version script.
+    # Linux names the version, so native code linking libffmpegkit binds its av*/swr*/sws*
+    # calls to this library only. A system FFmpeg in the global scope (pulled in by libmpv)
+    # versions its symbols LIBAV*_NN, so it can no longer take them over.
+    set(LINKER_SCRIPT_VERSION_NODE "")
+    if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+        set(LINKER_SCRIPT_VERSION_NODE "FFMPEGKIT ")
+    endif()
     set(LINKER_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-linker-script.map")
     file(WRITE ${LINKER_SCRIPT} "
-{
+${LINKER_SCRIPT_VERSION_NODE}{
     global:
         av*;
         swr*;
@@ -719,6 +740,19 @@ __ZTVN4Json*
     if(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
         include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FfmpegKitiOSStripLzma.cmake")
         ffmpegkit_add_final_ios_lzma_check(ffmpegkit)
+    endif()
+
+    if(MINGW)
+        # MSVC import library next to the MinGW one, made the way FFmpeg's own MinGW
+        # builds make theirs, so MSVC-built code (Dart build hooks) can link the DLL.
+        set(FFMPEGKIT_OUTPUT_DEF "${CMAKE_CURRENT_BINARY_DIR}/libffmpegkit.def")
+        target_link_options(ffmpegkit PRIVATE "-Wl,--output-def,${FFMPEGKIT_OUTPUT_DEF}")
+        add_custom_command(TARGET ffmpegkit POST_BUILD
+            COMMAND "${CMAKE_DLLTOOL}" -d "${FFMPEGKIT_OUTPUT_DEF}" -D "$<TARGET_FILE_NAME:ffmpegkit>"
+                    -l "${CMAKE_CURRENT_BINARY_DIR}/ffmpegkit.lib"
+            COMMENT "Creating the MSVC import library..."
+            VERBATIM
+        )
     endif()
 
     message(DEBUG "BUNDLE_LIBRARIES: ${BUNDLE_LIBRARIES}")
@@ -981,6 +1015,10 @@ else()
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin
     )
+
+    if(MINGW AND BUILD_SHARED_LIBS)
+        install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ffmpegkit.lib" DESTINATION lib)
+    endif()
 
     set(prefix "${CMAKE_INSTALL_PREFIX}")
     set(exec_prefix "\${prefix}")
