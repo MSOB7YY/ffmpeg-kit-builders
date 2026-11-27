@@ -5547,13 +5547,15 @@ install_ffmpeg() {
   ffmpeg_patches
   iswindows && export LD=${cross_prefix}gcc # ld weirdness with windows
   isandroid && export AS="$CC" && export LD="$CC"
+  local ffmpeg_as="$AS"
+  islinux && ffmpeg_as="$CC" # plain as cant preprocess aarch64 .S files
   if isapple; then 
     # export AS="gas-preprocessor.pl -arch $meson_cpu_family -- $(xcrun --sdk "$toolchain_sys" --find clang)"
     local bin2c_py=$(create_bin2c_py)
     setup_default_python
     gsed -i 's|RUN_BIN2C = $(BIN2C)|RUN_BIN2C = python3 ffbuild/bin2c.py|' "$ffmpeg_source_dir/ffbuild/common.mak"
   fi
-	do_make "AS=\"$AS\" PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
+	do_make "AS=\"$ffmpeg_as\" PREFIX=\"$ffmpeg_install_prefix\"" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make ffmpeg. see $LOG_FILE for details."
   do_make_install "PREFIX=\"$ffmpeg_install_prefix\"" "" "${touch_postfix}" 1 || exit_message 1 "install_ffmpeg: unable to make install ffmpeg. see $LOG_FILE for details."
 
 	echo -e "INFO: Moving all binaries" | tee -a "$LOG_FILE"
