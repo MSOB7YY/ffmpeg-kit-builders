@@ -16,6 +16,11 @@ on:
         required: true
         default: "android,ios,macos,linux,windows"
         type: string
+      linux_archs:
+        description: "Comma-separated Linux architectures (aarch64 alone adds it to an existing release)"
+        required: true
+        default: "x86_64,aarch64"
+        type: string
       small:
         description: "not-small (optimized for speed, what namida ships) or small (optimized for size)"
         required: true
@@ -90,7 +95,7 @@ jobs:
       build_bundle: true
       is_ci: false
       target_platforms: linux
-      target_archs: x86_64
+      target_archs: ${{ inputs.linux_archs }}
       licenses: lgpl
       small: ${{ inputs.small }}
       release_discussion_category: ""
