@@ -51,7 +51,7 @@ configure_ffmpeg_kit() {
 -DFFMPEG_KIT_BUNDLE_TYPE=\"$(get_bundle_type)\" \
 -DFFMPEG_KIT_VERSION=\"$(get_latest_version_from_changelog)\""
 
-  if [[ "$host_arch" == "aarch64" && -n "$SYSROOT" ]]; then
+  if truthy "$build_cross_compile" && [[ -n "$SYSROOT" ]]; then
     cmake_params+=" -DCMAKE_SYSROOT=\"$SYSROOT\""
   fi
 
@@ -111,7 +111,7 @@ detect_clang_version() {
 }
 
 set_toolchain_paths() {
-  if [[ "$host_arch" == "aarch64" ]]; then
+  if truthy "$build_cross_compile"; then
     export SYSROOT="${SYSROOT:-/opt/sysroots/aarch64-linux-gnu}"
     export host_target="${host_target:-aarch64-linux-gnu}"
     export CROSS_COMPILE="$host_target-"

@@ -19,7 +19,11 @@ export VALID_BUNDLES=("full" "video_hw" "video" "audio" "base" "debug" "namida")
 export VALID_BUILD_ON_LINUX=("linux" "windows" "android" "wasm")
 export VALID_BUILD_ON_MACOS=("ios" "iphonesimulator" "appletvos" "appletvsimulator" "macos")
 export VALID_ARCHS=("x86_64" "aarch64" "armv7a" "wasm32")
-export VALID_LINUX_ARCHS=("x86_64") # "aarch64" not functional yet
+# -- linux builds natively only, cross builds to aarch64 aren't functional yet
+case "$(uname -m)" in
+  aarch64) export VALID_LINUX_ARCHS=("aarch64") ;;
+  *) export VALID_LINUX_ARCHS=("x86_64") ;;
+esac
 export VALID_WASM_ARCHS=("wasm32")
 export VALID_WINDOWS_ARCHS=("x86_64")
 export VALID_ANDROID_ARCHS=("aarch64" "armv7a" "x86_64")

@@ -781,10 +781,16 @@ setup_linux_environment() {
     export install_pkgconfig_dir="${dependency_install_prefix}/lib/pkgconfig"
 
     case "$host_arch" in
-        "x86_64")
-            export host_arch="x86_64"
-            export cmake_host_arch="x86_64"
-            export platform_arch="x86_64"
+        "arm64"|"arm64-v8a")
+            export host_arch="aarch64"
+            ;;
+    esac
+
+    # -- native build when the machine has the target arch (x86_64, or aarch64 on an arm runner)
+    case "$host_arch" in
+        "$(uname -m)")
+            export cmake_host_arch="$host_arch"
+            export platform_arch="$host_arch"
             export host_target="$build_triple"
             export CROSS_COMPILE=
             export CC=gcc
@@ -794,9 +800,10 @@ setup_linux_environment() {
             export RANLIB=ranlib
             export LD=ld
             export STRIP=strip
+            export build_cross_compile=n
             unset SYSROOT PKG_CONFIG_SYSROOT_DIR PKG_CONFIG_LIBDIR
             ;;
-        "aarch64"|"arm64"|"arm64-v8a")
+        "aarch64")
             if [[ ! -x "/usr/local/arm-gnu-toolchain/sys-bin/aarch64-linux-gnu-gcc" || ! -e "/opt/sysroots/aarch64-linux-gnu/lib64/libc.so.6" || ! -e "/opt/sysroots/aarch64-linux-gnu/usr/lib64/libgcc_s.so" ]] || ! rust_target_installed "aarch64-unknown-linux-gnu"; then
                 run_toolchain_setup "setup-linux-arm64.sh"
             fi
@@ -824,34 +831,34 @@ setup_linux_environment() {
 
     export rust_target="$host_arch-unknown-linux-gnu"
     
-    if [[ "$host_arch" == "aarch64" ]]; then
+    if truthy "$build_cross_compile"; then
         export PKG_CONFIG_PATH="$dependency_install_prefix/share/pkgconfig:$install_pkgconfig_dir:$dependency_install_prefix/lib/pkgconfig:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig"
     else
         export PKG_CONFIG_PATH="$original_pkg_config_path:$dependency_install_prefix/share/pkgconfig:$install_pkgconfig_dir:$dependency_install_prefix/lib/$host_target/pkgconfig:$work_dir/pkgconfig:$ffmpeg_install_prefix/lib/pkgconfig:/usr/lib/$host_target/pkgconfig:/usr/lib/pkgconfig:/usr/lib64/pkgconfig:/usr/share/pkgconfig"
     fi
-    if [[ "$host_arch" == "aarch64" ]]; then
+    if truthy "$build_cross_compile"; then
         export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:/usr/local/arm-gnu-toolchain/sys-bin:$original_path"
     else
         export PATH="$ffmpeg_install_prefix/bin:$dependency_install_prefix/bin:$original_path"
     fi
     
     export linux_cflags="$original_cflags -Wno-pedantic -I${dependency_install_prefix}/include "
-    if [[ "$host_arch" == "aarch64" ]]; then
+    if truthy "$build_cross_compile"; then
         linux_cflags+=" --target=aarch64-redhat-linux-gnu --sysroot=$SYSROOT "
     fi
     export CFLAGS="$linux_cflags"
     export linux_cppflags="$original_cppflags -I${dependency_install_prefix}/include -DLINUX "
-    if [[ "$host_arch" == "aarch64" ]]; then
+    if truthy "$build_cross_compile"; then
         linux_cppflags+=" --target=aarch64-redhat-linux-gnu --sysroot=$SYSROOT "
     fi
     export CPPFLAGS="$linux_cppflags"
     export linux_cxxflags="$original_cxxflags -I${dependency_install_prefix}/include "
-    if [[ "$host_arch" == "aarch64" ]]; then
+    if truthy "$build_cross_compile"; then
         linux_cxxflags+=" --target=aarch64-redhat-linux-gnu --sysroot=$SYSROOT -I$SYSROOT/usr/include/c++/8 -I$SYSROOT/usr/include/c++/8/aarch64-redhat-linux "
     fi
     export CXXFLAGS="$linux_cxxflags"
     export linux_ldflags="$original_ldflags -L${dependency_install_prefix}/lib -Wl,-rpath,${dependency_install_prefix}/lib "
-    if [[ "$host_arch" == "aarch64" ]]; then
+    if truthy "$build_cross_compile"; then
         linux_ldflags+=" --sysroot=$SYSROOT -fuse-ld=lld -B/usr/local/arm-gnu-toolchain/lib/gcc/aarch64-none-linux-gnu/13.2.1 -L$SYSROOT/usr/lib/gcc/aarch64-redhat-linux/8 -L$SYSROOT/usr/lib64 -L$SYSROOT/lib64 -L/usr/local/arm-gnu-toolchain/lib/gcc/aarch64-none-linux-gnu/13.2.1 "
     fi
     export LDFLAGS="$linux_ldflags"
@@ -1509,7 +1516,7 @@ reset_cross_vars() {
     export WINDRES=
     export RC=
   elif islinux; then
-    if [[ "$host_arch" == "aarch64" ]]; then
+    if truthy "$build_cross_compile"; then
       export SYSROOT="${SYSROOT:-/opt/sysroots/aarch64-linux-gnu}"
       export CROSS_COMPILE="$host_target-"
       export CC="clang"
@@ -4797,7 +4804,7 @@ run_valid_function() {
   arg+=("$@")
   reset_allflags
   local workflow_requested_step="${WORKFLOW_REQUESTED_STEP:-${build_only}}"
-  if ! isapple && ! { islinux && [[ "$host_arch" == "aarch64" ]]; }; then
+  if ! isapple && ! { islinux && truthy "$build_cross_compile"; }; then
     export LDFLAGS=" $LDFLAGS -static-libstdc++ "
   fi
   iswindows && export LDFLAGS=" -static $LDFLAGS"

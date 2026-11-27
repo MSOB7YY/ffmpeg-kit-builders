@@ -46,7 +46,7 @@ fi
 case "$runner_platform" in
   linux)
     RUNNER_WORKFLOW_TARGET_PLATFORMS=$(printf "%s," "${VALID_BUILD_ON_LINUX[@]}")
-    runner_arch="x86_64"
+    runner_arch="$(uname -m)"
     ;;
   macos)
     RUNNER_WORKFLOW_TARGET_PLATFORMS=$(printf "%s," "${VALID_BUILD_ON_MACOS[@]}")
@@ -349,6 +349,11 @@ validate_workflow_target_combo() {
     echo "::notice::Skipping unsupported target $combo"
     return 1
   fi
+
+  if [[ "$runner_platform" == "linux" && "$runner_arch" == "aarch64" && "$platform" != "linux" ]]; then
+    echo "::notice::Skipping $combo: an aarch64 runner builds only linux"
+    return 1
+  fi
 }
 
 build_runner_args() {
@@ -452,7 +457,7 @@ ensure_target_toolchain() {
         [[ -f /etc/profile.d/sdkman.sh ]] && source /etc/profile.d/sdkman.sh
         ;;
       linux)
-        if [[ "$arch" == "aarch64" || "$arch" == "arm64" || "$arch" == "arm64-v8a" ]]; then
+        if [[ "$runner_arch" != "aarch64" ]] && [[ "$arch" == "aarch64" || "$arch" == "arm64" || "$arch" == "arm64-v8a" ]]; then
           sudo -E "${GITHUB_WORKSPACE}/scripts/toolchain/setup-linux-arm64.sh"
           [[ -f /etc/profile.d/linux-arm64-toolchain.sh ]] && source /etc/profile.d/linux-arm64-toolchain.sh
         fi

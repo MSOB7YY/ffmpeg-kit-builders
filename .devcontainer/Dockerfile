@@ -1,6 +1,8 @@
 # Use the official Manylinux 2.28 image (AlmaLinux 8 based, glibc 2.28)
 # This ensures binaries work on Ubuntu 20.04+, Debian 10+, RHEL 8+
-FROM quay.io/pypa/manylinux_2_28_x86_64
+# -- aarch64 for the arm runner, linux aarch64 builds natively there
+ARG MANYLINUX_ARCH=x86_64
+FROM quay.io/pypa/manylinux_2_28_${MANYLINUX_ARCH}
 
 # 1. Setup Environment & Repositories
 # Install EPEL (Extra Packages for Enterprise Linux) for tools like Ragel/Wine dependencies
@@ -144,7 +146,7 @@ RUN echo 'export RUSTUP_HOME=/usr/local/rustup' >> /etc/profile.d/rust.sh && \
     ln -sf /usr/local/cargo/bin/rustup /usr/bin/rustup && \
     ln -sf /usr/local/cargo/bin/cargo /usr/bin/cargo && \
     cargo --version && \
-    curl -fsSL https://github.com/lu-zero/cargo-c/releases/download/v0.10.20/cargo-c-x86_64-unknown-linux-musl.tar.gz -o /tmp/cargo-c.tar.gz && \
+    curl -fsSL "https://github.com/lu-zero/cargo-c/releases/download/v0.10.20/cargo-c-$(uname -m)-unknown-linux-musl.tar.gz" -o /tmp/cargo-c.tar.gz && \
     mkdir -p /tmp/cargo-c /usr/local/bin && \
     tar -xzf /tmp/cargo-c.tar.gz -C /tmp/cargo-c && \
     find /tmp/cargo-c -type f -name 'cargo-c*' -exec install -m 0755 {} /usr/local/bin/ \; && \

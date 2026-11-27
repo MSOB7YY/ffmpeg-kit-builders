@@ -63,6 +63,11 @@ on:
         required: false
         default: "ghcr.io/akashskypatel/ffmpeg-kit-builders-dev:latest"
         type: string
+      runner:
+        description: "Runner, ubuntu-24.04-arm builds linux aarch64 natively"
+        required: false
+        default: "ubuntu-24.04"
+        type: string
   workflow_dispatch:
     inputs:
       target_platforms:
@@ -135,6 +140,11 @@ on:
         required: false
         default: "ghcr.io/akashskypatel/ffmpeg-kit-builders-dev:latest"
         type: string
+      runner:
+        description: "Runner, ubuntu-24.04-arm builds linux aarch64 natively"
+        required: false
+        default: "ubuntu-24.04"
+        type: string
       run_tests:
         description: "Run tests - Only runs Linux tests when CI is true"
         required: false
@@ -184,7 +194,7 @@ permissions:
 jobs:
   build_deps:
     name: linux targets
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04' }}
     container:
       image: ${{ inputs.builder_image || 'ghcr.io/akashskypatel/ffmpeg-kit-builders-dev:latest' }}
       credentials:

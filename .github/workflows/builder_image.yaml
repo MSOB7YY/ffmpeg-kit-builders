@@ -14,9 +14,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # -- one native build per arch, merged into one multi-arch tag. linux aarch64 builds natively in the arm64 one
   image:
-    name: Publish Linux builder image
-    runs-on: ubuntu-24.04
+    name: Build ${{ matrix.platform }} builder image
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+            manylinux_arch: x86_64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            manylinux_arch: aarch64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:
       - name: Checkout dispatched source commit
@@ -40,29 +51,86 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Build and publish builder image
+      - name: Build and push builder image by digest
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: .devcontainer/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
-            ${{ steps.image.outputs.name }}:latest
+          platforms: ${{ matrix.platform }}
+          build-args: MANYLINUX_ARCH=${{ matrix.manylinux_arch }}
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.manylinux_arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.manylinux_arch }}
 
-      - name: Record immutable builder image reference
+      - name: Export digest
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         shell: bash
         run: |
+          test -n "$IMAGE_DIGEST"
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${IMAGE_DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: builder-image-digest-${{ matrix.manylinux_arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish Linux builder image
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: builder-image-digest-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/digests
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # image names must be lowercase, owners like MSOB7YY are not
+      - name: Resolve image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ffmpeg-kit-builders-dev" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Publish multi-arch builder image
+        working-directory: ${{ runner.temp }}/digests
+        shell: bash
+        run: |
           image="${{ steps.image.outputs.name }}"
+          sources=()
+          for digest in *; do
+            sources+=("${image}@sha256:${digest}")
+          done
+          docker buildx imagetools create \
+            -t "${image}:sha-${GITHUB_SHA}" \
+            -t "${image}:latest" \
+            "${sources[@]}"
+
+      - name: Record immutable builder image reference
+        shell: bash
+        run: |
+          image="${{ steps.image.outputs.name }}"
+          IMAGE_DIGEST=$(docker buildx imagetools inspect "${image}:sha-${GITHUB_SHA}" --format '{{json .Manifest}}' | jq -r .digest)
           test -n "$IMAGE_DIGEST"
           {
             echo "image=${image}"

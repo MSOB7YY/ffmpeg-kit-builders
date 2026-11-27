@@ -87,7 +87,7 @@ jobs:
 
   linux:
     needs: tests
-    if: ${{ !failure() && !cancelled() && contains(inputs.platforms, 'linux') }}
+    if: ${{ !failure() && !cancelled() && contains(inputs.platforms, 'linux') && contains(inputs.linux_archs, 'x86_64') }}
     uses: ./.github/workflows/build_on_linux.yaml
     secrets: inherit
     with:
@@ -95,12 +95,31 @@ jobs:
       build_bundle: true
       is_ci: false
       target_platforms: linux
-      target_archs: ${{ inputs.linux_archs }}
+      target_archs: x86_64
       licenses: lgpl
       small: ${{ inputs.small }}
       release_discussion_category: ""
       builder_image: ${{ inputs.builder_image }}
       deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
+
+  # -- native on the arm runner, the cross toolchain path isn't functional
+  linux_arm64:
+    needs: tests
+    if: ${{ !failure() && !cancelled() && contains(inputs.platforms, 'linux') && contains(inputs.linux_archs, 'aarch64') }}
+    uses: ./.github/workflows/build_on_linux.yaml
+    secrets: inherit
+    with:
+      bundles: namida
+      build_bundle: true
+      is_ci: false
+      target_platforms: linux
+      target_archs: aarch64
+      licenses: lgpl
+      small: ${{ inputs.small }}
+      release_discussion_category: ""
+      builder_image: ${{ inputs.builder_image }}
+      deps_fallback_repository: ${{ inputs.deps_fallback_repository }}
+      runner: ubuntu-24.04-arm
 
   windows:
     needs: tests
